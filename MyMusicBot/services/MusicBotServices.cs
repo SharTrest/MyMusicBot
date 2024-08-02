@@ -5,7 +5,7 @@ using YandexMusicApi.Api;
 using YandexMusicApi.ComponentModels;
 using YandexMusicApi.Network;
 
-namespace MusicBot.services
+namespace MusicBot.Services
 {
     public static class MusicBotServices
     {

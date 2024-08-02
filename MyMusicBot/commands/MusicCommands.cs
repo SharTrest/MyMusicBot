@@ -1,10 +1,13 @@
 ﻿using DSharpPlus.Entities;
 using DSharpPlus.Lavalink;
 using DSharpPlus.SlashCommands;
-using MusicBot.services;
+
+using MusicBot.Services;
+using MyMusicBot.Handlers;
+using System.Drawing;
 
 
-namespace MusicBot.Commands
+namespace MyMusicBot.Commands
 {
     public class MusicCommands : ApplicationCommandModule
     {
@@ -13,6 +16,7 @@ namespace MusicBot.Commands
         {
             DSharpPlus.Entities.DiscordChannel userVC;
             DSharpPlus.Lavalink.LavalinkExtension lavalinkInstance;
+
             try
             {
                 await MusicBotServices.CheckConnection(context, out userVC, out lavalinkInstance);
@@ -34,25 +38,24 @@ namespace MusicBot.Commands
             var track = await MusicBotServices.SearchTrack(query);
 
             var searchQuery = await node.Rest.GetTracksAsync(track.Uri);
-            var nowPlaying = new DiscordEmbedBuilder()
-            {
-                Color = DiscordColor.Lilac,
-                Title = "Cейчас играет ебейший трек!",
-                Description = $"Сейчас играет {track.Title}\n"
-                   + $"Исполнитель: {track.Artist}\n"
-                   + $"Альбом: {track.Album}\n"
-                   + $"Ссылочка на трек: {track.Url}",
-            };
-
-            await context.CreateResponseAsync($"<@{context.User.Id}>", embed: nowPlaying);
-
-            Thread.Sleep(1000);
 
             if (searchQuery.LoadResultType == LavalinkLoadResultType.NoMatches || searchQuery.LoadResultType == LavalinkLoadResultType.LoadFailed) 
             {
-                Console.WriteLine(track.JToken);
-                await context.Channel.SendMessageAsync($"Трек не найден :( {track.Uri}");
+                await context.Channel.SendMessageAsync(embed:await EmbedHandler.CreateErrorEmbed("проигрывании трека 😔", "повторите попытку позже"));
+                return;
             }
+
+            var color = DiscordColor.Lilac;
+            var title = "Cейчас играет ебейший трек!";
+            var description = $"Сейчас играет {track.Title}\n"
+                               + $"Исполнитель: {track.Artist}\n"
+                               + $"Альбом: {track.Album}\n"
+                               + $"Ссылочка на трек: {track.Url}";
+
+            var nowPlaying = await EmbedHandler.CreateBasicEmbed(title, description, color);
+            
+
+            await context.CreateResponseAsync($"<@{context.User.Id}>", embed: nowPlaying);
             var musicTrack = searchQuery.Tracks.First();
            
             await conn.PlayAsync(musicTrack);
