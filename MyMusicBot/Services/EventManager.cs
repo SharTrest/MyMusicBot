@@ -66,7 +66,7 @@ namespace MyMusicBot.Services
 
             Console.WriteLine($"{DateTime.Now}\t (READY)\tBot is ready");
             await _client.SetStatusAsync(Discord.UserStatus.Online);
-            await _client.SetGameAsync($"Prefix: {ConfigManager.Config.Prefix}", null, Discord.ActivityType.Listening);
+            await _client.SetGameAsync($"Худший из худших", null, Discord.ActivityType.CustomStatus);
 
         }
        
