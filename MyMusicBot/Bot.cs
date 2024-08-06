@@ -41,25 +41,29 @@ namespace MyMusicBot
 
 
             var collection = new ServiceCollection();
+            collection.Clear();
             collection.AddLavaNode(
                 x =>
                 {
                     x.IsSecure = true;
-                    x.Hostname = "ssl.lavalink.rocks";
+                    x.Hostname = "lavalinkv4.serenetia.com";
                     x.Port = 443;
-                    x.Authorization = "horizxon.tech";
+                    x.Authorization = "lavalinkv4";
                 }
             );
+            collection.AddSingleton<ConfigManager>();
+            collection.AddSingleton<SearchService>();
             collection.AddSingleton(_client);
             collection.AddSingleton(_commandService);
             collection.AddSingleton<CommandHandler>();
+            collection.AddSingleton<AudioService>();
             collection.AddSingleton(x => new InteractionService(x.GetRequiredService<DiscordSocketClient>()));
             collection.AddLogging(x =>
             {
                 x.ClearProviders();
                 x.SetMinimumLevel(LogLevel.Trace);
             });
-            collection.AddSingleton<AudioService>();
+
 
             ServiceManager.SetProvider(collection);
 

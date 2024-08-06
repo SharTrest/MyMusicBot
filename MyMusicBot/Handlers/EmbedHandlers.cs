@@ -11,21 +11,21 @@ namespace MyMusicBot.Handlers
     {
         public static async Task<Embed> CreateBasicEmbed(string title, string description, Color color)
         {
-            var embed = await Task.Run(() => (new EmbedBuilder()
+            var embed = new EmbedBuilder()
                 .WithTitle(title)
                 .WithDescription(description)
                 .WithColor(color)
-                .WithCurrentTimestamp().Build()));
+                .WithCurrentTimestamp().Build();
             return embed;
         }
 
         public static async Task<Embed> CreateErrorEmbed(string source, string error)
         {
-            var embed = await Task.Run(() => new EmbedBuilder()
-                .WithTitle($"ERROR OCCURED FROM - {source}")
-                .WithDescription($"**Error Deaitls**: \n{error}")
+            var embed =  new EmbedBuilder()
+                .WithTitle($"ОШИБКА: {source}")
+                .WithDescription($"ОПИСАНИЕ ОШИБКИ: \n{error}")
                 .WithColor(Color.DarkRed)
-                .WithCurrentTimestamp().Build());
+                .WithCurrentTimestamp().Build();
             return embed;
         }
     }

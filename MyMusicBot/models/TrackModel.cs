@@ -8,7 +8,7 @@ namespace MusicBot.models
         public string? Artist { get; set; }
         public string Url { get; set; }
         public string? Album { get; set; }
-        public Uri? Uri { get; set; }
+        public string? Uri { get; set; }
         public int TrackID { get; set; }
         public int AlbumID { get; set; }
         public JToken JToken { get; set; }

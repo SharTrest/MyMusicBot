@@ -2,7 +2,7 @@
 
 namespace MyMusicBot.Services
 {
-    public static class ConfigManager
+    public class ConfigManager
     {
         private static string ConfigFolder = "Config";
         private static string ConfigFile = "BotCfg.json";
@@ -12,7 +12,7 @@ namespace MyMusicBot.Services
         static ConfigManager()
         {
             if (!Directory.Exists(ConfigFolder))
-                Directory.CreateDirectory(ConfigFolder);
+                Directory.CreateDirectory(ConfigFolder); 
 
             if (!File.Exists(ConfigPath))
             {

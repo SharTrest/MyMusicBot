@@ -1,14 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using AngleSharp.Css;
 using Discord;
 using Discord.Commands;
 using Discord.Interactions;
+using Discord.WebSocket;
 using MyMusicBot.Handlers;
 using MyMusicBot.Services;
 using Victoria;
+using Victoria.Rest;
 using Victoria.Rest.Search;
+using YandexMusicApi.Api;
 
 namespace MyMusicBot.Modules
 {
@@ -16,10 +21,10 @@ namespace MyMusicBot.Modules
     public sealed class AudioModule(
         LavaNode<LavaPlayer<LavaTrack>, LavaTrack> lavaNode,
         AudioService audioService, InteractionService Commands,
-        CommandHandler _handler)
+        CommandHandler _handler, SearchService searchService)
         : InteractionModuleBase<SocketInteractionContext>
     {
-     
+
         private static readonly IEnumerable<int> Range = Enumerable.Range(1900, 2000);
 
         [SlashCommand("join", "Вы призываете бота в канал!")]
@@ -58,7 +63,7 @@ namespace MyMusicBot.Modules
             try
             {
                 await lavaNode.LeaveAsync(voiceChannel);
-                await RespondAsync($"Я СВОБОДЕЕЕЕН {voiceChannel.Name}!");
+                await RespondAsync($"Я СВОБОДЕЕЕЕН!");
             }
             catch (Exception exception)
             {
@@ -66,155 +71,168 @@ namespace MyMusicBot.Modules
             }
         }
 
-        [Command("play")]
+        [SlashCommand("play", "Проигрывает Ваш трек")]
         public async Task PlayAsync([Remainder] string searchQuery)
         {
-            if (string.IsNullOrWhiteSpace(searchQuery))
+            await DeferAsync();
+
+              if (string.IsNullOrWhiteSpace(searchQuery))
             {
-                await ReplyAsync("Please provide search terms.");
+                await FollowupAsync("Please provide search terms.");
                 return;
             }
 
             var player = await lavaNode.TryGetPlayerAsync(Context.Guild.Id);
-            if (player == null)
+            if (player == null || player.VoiceState == null)
             {
                 var voiceState = Context.User as IVoiceState;
                 if (voiceState?.VoiceChannel == null)
                 {
-                    await ReplyAsync("You must be connected to a voice channel!");
+                    var emsg = await EmbedHandler.CreateErrorEmbed("/play", "Вы должны быть в голосовом канале!");
+                    await FollowupAsync(embed: emsg);
                     return;
                 }
 
                 try
                 {
                     player = await lavaNode.JoinAsync(voiceState.VoiceChannel);
-                    await ReplyAsync($"Joined {voiceState.VoiceChannel.Name}!");
                     audioService.TextChannels.TryAdd(Context.Guild.Id, Context.Channel.Id);
                 }
                 catch (Exception exception)
                 {
-                    await ReplyAsync(exception.Message);
+                    await FollowupAsync(exception.Message);
                 }
             }
 
-            var searchResponse = await lavaNode.LoadTrackAsync(searchQuery);
+            var findTrack = await SearchService.SearchTrack(searchQuery);
+            var searchResponse = await lavaNode.LoadTrackAsync(findTrack.Uri);
+
             if (searchResponse.Type is SearchType.Empty or SearchType.Error)
             {
-                await ReplyAsync($"I wasn't able to find anything for `{searchQuery}`.");
+                var emsg = await EmbedHandler.CreateErrorEmbed("/play", $"К сожалению, `{searchQuery}` не найдено.");
+                await FollowupAsync(embed: emsg);
                 return;
             }
 
             var track = searchResponse.Tracks.FirstOrDefault();
-            if (player.GetQueue().Count == 0)
+
+            audioService.AddTrackInQueue(player.GuildId, findTrack.Title);
+
+            if (player.Track == null)
             {
+                var firstmsg = await EmbedHandler.CreateBasicEmbed("Сейчас играет!",
+                        $"Название: {findTrack.Title}\n"
+                        + $"Исполнитель: {findTrack.Artist}\n"
+                        + $"Длительность: {track.Duration:mm\\:ss}\n"
+                        + $"Ссылка на трек: {findTrack.Url}\n",
+                        Color.Teal
+                        );
                 await player.PlayAsync(lavaNode, track);
-                await ReplyAsync($"Now playing: {track.Title}");
+                await FollowupAsync(embed: firstmsg);
                 return;
             }
-
             player.GetQueue().Enqueue(track);
-            await ReplyAsync($"Added {track.Title} to queue.");
+
+            var msg = await EmbedHandler.CreateBasicEmbed("Добавлен трек!",
+                            $"Название: {findTrack.Title}\n"
+                            + $"Исполнитель: {findTrack.Artist}\n"
+                            + $"Длительность: {track.Duration:mm\\:ss}\n"
+                            + $"Ссылка на трек: {findTrack.Url}\n",
+                            Color.Teal);
+
+            await FollowupAsync(embed: msg);
+
         }
 
-        [Command("pause"), RequirePlayer]
+        [SlashCommand("pause", "Останавливает трек"), RequirePlayer]
         public async Task PauseAsync()
         {
             var player = await lavaNode.TryGetPlayerAsync(Context.Guild.Id);
-            if (player.IsPaused && player.Track != null)
+            if (player == null || player.IsPaused && player.Track != null)
             {
-                await ReplyAsync("I cannot pause when I'm not playing anything!");
+                await RespondAsync("Нечего останавливать!");
                 return;
             }
 
             try
             {
                 await player.PauseAsync(lavaNode);
-                await ReplyAsync($"Paused: {player.Track.Title}");
+                await RespondAsync($"Paused: {player.Track.Title}");
             }
             catch (Exception exception)
             {
-                await ReplyAsync(exception.Message);
+                await RespondAsync(exception.Message);
             }
         }
 
-        [Command("resume"), RequirePlayer]
+        [SlashCommand("resume", "Продолжаем дискотеку"), RequirePlayer]
         public async Task ResumeAsync()
         {
             var player = await lavaNode.TryGetPlayerAsync(Context.Guild.Id);
-            if (!player.IsPaused && player.Track != null)
+            if (player == null || !player.IsPaused && player.Track == null)
             {
-                await ReplyAsync("I cannot resume when I'm not playing anything!");
+                await RespondAsync("Нечего проигрывать!");
                 return;
             }
 
             try
             {
                 await player.ResumeAsync(lavaNode, player.Track);
-                await ReplyAsync($"Resumed: {player.Track.Title}");
+                await RespondAsync($"Resumed: {player.Track.Title}");
             }
             catch (Exception exception)
             {
-                await ReplyAsync(exception.Message);
+                await RespondAsync(exception.Message);
             }
         }
 
-        [Command("stop"), RequirePlayer]
+        [SlashCommand("stop", "Останавливает дискотеку"), RequirePlayer]
         public async Task StopAsync()
         {
             var player = await lavaNode.TryGetPlayerAsync(Context.Guild.Id);
             if (!player.State.IsConnected || player.Track == null)
             {
-                await ReplyAsync("Woah, can't stop won't stop.");
+                await RespondAsync(embed: await EmbedHandler.CreateErrorEmbed("/stop", "Нечего останавливать"));
                 return;
             }
 
             try
             {
                 await player.StopAsync(lavaNode, player.Track);
-                await ReplyAsync("No longer playing anything.");
+                await RespondAsync(embed: await EmbedHandler.CreateBasicEmbed("Трек остановлен", "", Color.Red));
             }
             catch (Exception exception)
             {
-                await ReplyAsync(exception.Message);
+                await RespondAsync(exception.Message);
             }
         }
 
-        [Command("skip"), RequirePlayer]
+        [SlashCommand("skip", "Пропуск трека"), RequirePlayer]
         public async Task SkipAsync()
         {
             var player = await lavaNode.TryGetPlayerAsync(Context.Guild.Id);
+
             if (!player.State.IsConnected)
             {
-                await ReplyAsync("Woaaah there, I can't skip when nothing is playing.");
+                await RespondAsync("Нечего скипать.");
                 return;
             }
 
-            var voiceChannelUsers = Context.Guild.CurrentUser.VoiceChannel
-                .Users
-                .Where(x => !x.IsBot)
-                .ToArray();
-
-            if (!audioService.VoteQueue.Add(Context.User.Id))
             {
-                await ReplyAsync("You can't vote again.");
-                return;
-            }
-
-            var percentage = audioService.VoteQueue.Count / voiceChannelUsers.Length * 100;
-            if (percentage < 85)
-            {
-                await ReplyAsync("You need more than 85% votes to skip this song.");
-                return;
-            }
-
-            try
-            {
-                var (skipped, currenTrack) = await player.SkipAsync(lavaNode);
-                await ReplyAsync($"Skipped: {skipped.Title}\nNow Playing: {currenTrack.Title}");
-            }
-            catch (Exception exception)
-            {
-                await ReplyAsync(exception.Message);
+                try
+                {
+                    var queue = player.GetQueue();
+                    var cur = player.GetQueue().First();
+                    var title = await audioService.RemoveTrackFromQueue(player.GuildId);
+                    player.PlayAsync(lavaNode, cur, false);
+                    player.GetQueue().TryDequeue(out cur);
+                    await RespondAsync($"Skipped: {title}\n");
+                }
+                catch (Exception exception)
+                {
+                    player.GetQueue().Clear();
+                    await RespondAsync("Очередь пустая");
+                }
             }
         }
     }
